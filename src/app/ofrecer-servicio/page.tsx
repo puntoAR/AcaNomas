@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { Provider } from '@/types';
-import { createProvider, getCategories, BALCARCE_CENTER } from '@/lib/store';
+import { createProvider, getCategories, getProviders, BALCARCE_CENTER } from '@/lib/store';
+import { sanitizeTextInput, sanitizePhone, detectMaliciousPayload } from '@/lib/security';
 
 export default function OfrecerServicioPage() {
   const router = useRouter();
@@ -48,10 +49,47 @@ export default function OfrecerServicioPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !zoneName) return;
+    setErrorMsg('');
+
+    // Detección de inyecciones maliciosas
+    if (
+      detectMaliciousPayload(name) ||
+      detectMaliciousPayload(phone) ||
+      detectMaliciousPayload(customCategory) ||
+      detectMaliciousPayload(bio)
+    ) {
+      setErrorMsg('Se detectaron caracteres o instrucciones no permitidas.');
+      return;
+    }
+
+    const safeName = sanitizeTextInput(name, 60);
+    const safeRealName = sanitizeTextInput(realName, 60) || safeName;
+    const safePhone = sanitizePhone(phone);
+    const safeZone = sanitizeTextInput(zoneName, 80) || 'Balcarce Centro';
+    const safeCustomCategory = sanitizeTextInput(customCategory, 40);
+    const safeBio = sanitizeTextInput(bio, 350);
+    const safeMatricula = sanitizeTextInput(matriculaNumber, 30);
+
+    if (!safeName || safeName.length < 3) {
+      setErrorMsg('Por favor ingresá un nombre válido.');
+      return;
+    }
+
+    if (!safePhone || safePhone.length < 6) {
+      setErrorMsg('Ingresá un número de teléfono válido.');
+      return;
+    }
+
+    // Control Anti-Fraude: Teléfono duplicado
+    const providers = getProviders();
+    if (providers.some(p => sanitizePhone(p.phone) === safePhone)) {
+      setErrorMsg('Ya existe un prestador registrado con este teléfono en Balcarce.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -65,30 +103,30 @@ export default function OfrecerServicioPage() {
 
     const newProvider: Provider = {
       id: newId,
-      name: isProtected ? `${name} (${customCategory || category.toUpperCase()})` : name,
-      realName: realName || name,
-      category: category === 'otro' ? (customCategory.toLowerCase().trim() || 'otro') : category,
-      customCategory: category === 'otro' ? customCategory : undefined,
+      name: isProtected ? `${safeName} (${safeCustomCategory || category.toUpperCase()})` : safeName,
+      realName: safeRealName,
+      category: category === 'otro' ? (safeCustomCategory.toLowerCase().trim() || 'otro') : category,
+      customCategory: category === 'otro' ? safeCustomCategory : undefined,
       isProtected,
       avatar: defaultAvatar,
-      phone,
-      zoneName,
+      phone: safePhone,
+      zoneName: safeZone,
       location: {
         lat: BALCARCE_CENTER.lat + (Math.random() * 0.01 - 0.005),
         lng: BALCARCE_CENTER.lng + (Math.random() * 0.01 - 0.005)
       },
-      coverageRadiusKm,
-      isVerified: hasDniUpload, // If uploaded, becomes verified or pending
-      dniStatus: hasDniUpload ? 'verified' : 'none',
-      isMatriculado,
-      matriculaNumber: isMatriculado ? matriculaNumber : undefined,
-      matriculaStatus: isMatriculado ? (hasMatriculaUpload ? 'verified' : 'pending') : 'none',
+      coverageRadiusKm: Math.min(Math.max(coverageRadiusKm || 6, 1), 30),
+      isVerified: false, // Siempre inicia sin verificar hasta auditoría
+      dniStatus: hasDniUpload ? 'pending' : 'none', // PENDIENTE de revisión administrativa
+      isMatriculado: Boolean(isMatriculado && safeMatricula),
+      matriculaNumber: isMatriculado ? safeMatricula : undefined,
+      matriculaStatus: isMatriculado && safeMatricula ? 'pending' : 'none',
       isPremium: false,
       rating: 5.0,
-      reviewCount: 1,
+      reviewCount: 0,
       punctualityScore: 100,
       servicesCompleted: 0,
-      bio: bio || `Profesional de oficio en Balcarce con ${experienceYears} años de trayectoria. Calidad y cumplimiento asegurado.`,
+      bio: safeBio || `Profesional de oficio en Balcarce con ${experienceYears} años de trayectoria. Calidad y cumplimiento asegurado.`,
       experienceYears,
       createdAt: new Date().toISOString().split('T')[0]
     };
@@ -141,6 +179,12 @@ export default function OfrecerServicioPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {errorMsg && (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 animate-in fade-in">
+                  {errorMsg}
+                </div>
+              )}
+
               {/* 1. Oficio */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">

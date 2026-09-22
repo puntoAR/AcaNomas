@@ -381,13 +381,28 @@ export function getReviews(): Review[] {
   }
 }
 
-export function addReview(review: Review): void {
-  if (!isBrowser()) return;
+export function addReview(review: Review): boolean {
+  if (!isBrowser()) return false;
   const reviews = getReviews();
+
+  // Control Anti-Fraude: Evitar que una misma orden sea calificada múltiples veces
+  if (review.orderId && reviews.some(r => r.orderId === review.orderId)) {
+    console.warn('Intento de calificación duplicada bloqueado:', review.orderId);
+    return false;
+  }
+
+  // Asegurar que las calificaciones se mantengan estrictamente entre 1 y 5
+  review.punctualityRating = Math.min(Math.max(review.punctualityRating, 1), 5);
+  review.qualityRating = Math.min(Math.max(review.qualityRating, 1), 5);
+  review.priceRating = Math.min(Math.max(review.priceRating, 1), 5);
+  review.averageRating = parseFloat(
+    ((review.punctualityRating + review.qualityRating + review.priceRating) / 3).toFixed(1)
+  );
+
   reviews.unshift(review);
   localStorage.setItem(REVIEWS_KEY, JSON.stringify(reviews));
 
-  // Update provider rating average
+  // Actualizar promedio general del prestador
   const providerReviews = reviews.filter(r => r.providerId === review.providerId);
   const avg = providerReviews.reduce((sum, r) => sum + r.averageRating, 0) / providerReviews.length;
   
@@ -399,10 +414,12 @@ export function addReview(review: Review): void {
     });
   }
 
-  // Mark request as rated
+  // Marcar la solicitud como calificada
   if (review.orderId) {
     updateServiceRequest(review.orderId, { clientRated: true });
   }
+
+  return true;
 }
 
 export function getCategories(): Category[] {

@@ -1,5 +1,14 @@
 import { AuthUser, Provider, UserRole } from '@/types';
 import { getProviders, createProvider, BALCARCE_CENTER } from './store';
+import {
+  sanitizeTextInput,
+  sanitizePhone,
+  sanitizeImageUrl,
+  detectMaliciousPayload,
+  checkRateLimit,
+  recordFailedAttempt,
+  resetRateLimit
+} from './security';
 
 const AUTH_USER_KEY = 'acanomas_current_user_v1';
 const USERS_DB_KEY = 'acanomas_users_db_v1';
@@ -95,9 +104,33 @@ export function setCurrentUser(user: AuthUser | null): void {
   window.dispatchEvent(new Event('auth-change'));
 }
 
-// 1. ADMIN LOGIN
-export function loginAsAdmin(password: string): { success: boolean; error?: string } {
+// 1. ADMIN LOGIN CON RATE LIMITING Y BLOQUEO POR FUERZA BRUTA
+export function loginAsAdmin(password: string): { 
+  success: boolean; 
+  error?: string;
+  isLocked?: boolean;
+  remainingSeconds?: number;
+} {
+  const rateLimitKey = 'admin_lockout';
+  const check = checkRateLimit(rateLimitKey);
+
+  if (!check.allowed) {
+    return {
+      success: false,
+      isLocked: true,
+      remainingSeconds: check.remainingSeconds,
+      error: `Demasiados intentos erróneos. Acceso de administrador bloqueado temporalmente por ${check.remainingSeconds} segundos.`
+    };
+  }
+
+  // Prevenir inyección o contraseñas gigantes
+  if (detectMaliciousPayload(password) || password.length > 128) {
+    recordFailedAttempt(rateLimitKey);
+    return { success: false, error: 'Credenciales inválidas o caracteres no permitidos.' };
+  }
+
   if (password === ADMIN_CREDENTIALS.password || password === ADMIN_CREDENTIALS.pin) {
+    resetRateLimit(rateLimitKey);
     const adminUser: AuthUser = {
       id: 'usr-admin-1',
       name: 'Administrador AcáNomás',
@@ -107,26 +140,60 @@ export function loginAsAdmin(password: string): { success: boolean; error?: stri
     setCurrentUser(adminUser);
     return { success: true };
   }
-  return { success: false, error: 'Contraseña o PIN incorrecto. (Probá con admin123)' };
+
+  const failed = recordFailedAttempt(rateLimitKey);
+  if (failed.locked) {
+    return {
+      success: false,
+      isLocked: true,
+      remainingSeconds: failed.remainingSeconds,
+      error: `Límite de intentos alcanzado. Acceso bloqueado por ${failed.remainingSeconds} segundos por seguridad.`
+    };
+  }
+
+  return { 
+    success: false, 
+    error: `Contraseña incorrecta. Te quedan ${failed.attemptsLeft} intentos antes del bloqueo.` 
+  };
 }
 
-// 2. PRESTADOR LOGIN & REGISTRO
+// 2. PRESTADOR LOGIN & REGISTRO SEGURO
 export function loginPrestador(
   phone: string,
   password?: string
-): { success: boolean; user?: AuthUser; error?: string } {
-  const cleanPhone = phone.replace(/[^0-9]/g, '');
+): { success: boolean; user?: AuthUser; error?: string; isLocked?: boolean; remainingSeconds?: number } {
+  const cleanPhone = sanitizePhone(phone);
+  if (!cleanPhone || cleanPhone.length < 6) {
+    return { success: false, error: 'Ingresá un número de teléfono válido.' };
+  }
+
+  if (detectMaliciousPayload(phone) || (password && detectMaliciousPayload(password))) {
+    return { success: false, error: 'Se detectaron caracteres no permitidos.' };
+  }
+
+  const rateLimitKey = `prov_login_${cleanPhone}`;
+  const check = checkRateLimit(rateLimitKey);
+
+  if (!check.allowed) {
+    return {
+      success: false,
+      isLocked: true,
+      remainingSeconds: check.remainingSeconds,
+      error: `Demasiados intentos fallidos. Cuenta protegida temporalmente. Esperá ${check.remainingSeconds} segundos.`
+    };
+  }
+
   const users = getRegisteredUsers();
-  
   const user = users.find(
-    u => u.role === 'prestador' && (u.phone?.replace(/[^0-9]/g, '') === cleanPhone || u.phone?.includes(cleanPhone))
+    u => u.role === 'prestador' && (sanitizePhone(u.phone) === cleanPhone || (u.phone && cleanPhone.includes(u.phone)))
   );
 
   if (!user) {
-    // Check if phone matches any provider in store directly
+    // Verificar si coincide con prestadores precargados en el store
     const providers = getProviders();
-    const provider = providers.find(p => p.phone.includes(cleanPhone));
+    const provider = providers.find(p => sanitizePhone(p.phone).includes(cleanPhone));
     if (provider) {
+      resetRateLimit(rateLimitKey);
       const newUser: AuthUser = {
         id: `usr-${provider.id}`,
         name: provider.name,
@@ -137,13 +204,33 @@ export function loginPrestador(
       setCurrentUser(newUser);
       return { success: true, user: newUser };
     }
-    return { success: false, error: 'No encontramos ningún prestador registrado con ese teléfono. Registrate a continuación.' };
+
+    const failed = recordFailedAttempt(rateLimitKey);
+    return { 
+      success: false, 
+      error: failed.locked 
+        ? `Cuenta bloqueada por ${failed.remainingSeconds}s.` 
+        : 'No encontramos ningún prestador registrado con ese teléfono.' 
+    };
   }
 
   if (password && user.password && user.password !== password) {
-    return { success: false, error: 'Contraseña incorrecta para este prestador.' };
+    const failed = recordFailedAttempt(rateLimitKey);
+    if (failed.locked) {
+      return {
+        success: false,
+        isLocked: true,
+        remainingSeconds: failed.remainingSeconds,
+        error: `Has superado el límite de intentos. Bloqueo temporal por ${failed.remainingSeconds} segundos.`
+      };
+    }
+    return { 
+      success: false, 
+      error: `Contraseña incorrecta. Intentos restantes: ${failed.attemptsLeft}.` 
+    };
   }
 
+  resetRateLimit(rateLimitKey);
   setCurrentUser(user);
   return { success: true, user };
 }
@@ -165,91 +252,178 @@ export interface RegisterPrestadorInput {
 export function registerPrestador(
   input: RegisterPrestadorInput
 ): { success: boolean; user?: AuthUser; error?: string } {
-  if (!input.name || !input.phone || !input.category) {
-    return { success: false, error: 'Completá todos los campos requeridos.' };
+  // 1. Sanitizar y verificar entradas
+  const safeName = sanitizeTextInput(input.name, 60);
+  const safePhone = sanitizePhone(input.phone);
+  const safeCategory = sanitizeTextInput(input.category, 40);
+  const safeCustomCategory = sanitizeTextInput(input.customCategory, 40);
+  const safeZone = sanitizeTextInput(input.zoneName, 80) || 'Balcarce Centro';
+  const safeBio = sanitizeTextInput(input.bio, 400);
+  const safeMatricula = sanitizeTextInput(input.matriculaNumber, 30);
+  const safeDniPhoto = sanitizeImageUrl(input.dniPhotoUrl, '');
+
+  // Detección de inyecciones
+  if (
+    detectMaliciousPayload(input.name) ||
+    detectMaliciousPayload(input.phone) ||
+    detectMaliciousPayload(input.customCategory) ||
+    detectMaliciousPayload(input.bio)
+  ) {
+    return { success: false, error: 'El formulario contiene caracteres o instrucciones no permitidas.' };
   }
 
-  if (!input.dniPhotoUrl) {
-    return { success: false, error: 'La foto de tu DNI es obligatoria para verificar tu identidad y cuidar la seguridad de los vecinos de Balcarce.' };
+  if (!safeName || safeName.length < 3) {
+    return { success: false, error: 'Por favor ingresá un nombre válido (mínimo 3 letras).' };
   }
 
-  const cleanPhone = input.phone.replace(/[^0-9]/g, '');
+  if (!safePhone || safePhone.length < 7) {
+    return { success: false, error: 'Ingresá un número de teléfono o WhatsApp válido.' };
+  }
+
+  if (!safeDniPhoto) {
+    return { success: false, error: 'La foto de tu DNI es estrictamente obligatoria para verificar tu identidad y cuidar la seguridad del barrio.' };
+  }
+
+  if (input.password && (input.password.length < 4 || input.password.length > 128)) {
+    return { success: false, error: 'La contraseña debe tener entre 4 y 128 caracteres.' };
+  }
+
+  // 2. Control Anti-Fraude: Evitar duplicación de teléfono
+  const existingUsers = getRegisteredUsers();
+  const phoneExists = existingUsers.some(
+    u => u.phone && sanitizePhone(u.phone) === safePhone
+  );
+  if (phoneExists) {
+    return { 
+      success: false, 
+      error: 'Ya existe una cuenta registrada con este número de teléfono. Si sos vos, iniciá sesión directamente.' 
+    };
+  }
+
+  const existingProviders = getProviders();
+  const providerPhoneExists = existingProviders.some(
+    p => sanitizePhone(p.phone) === safePhone
+  );
+  if (providerPhoneExists) {
+    return {
+      success: false,
+      error: 'Este número de teléfono ya pertenece a un prestador registrado en Balcarce.'
+    };
+  }
+
   const newProviderId = 'prov-' + Date.now().toString(36);
 
-  // Create provider in main store with dniStatus = pending!
+  // 3. Crear prestador en el store con estado PENDIENTE de verificación
   const newProvider: Provider = {
     id: newProviderId,
-    name: input.name,
-    realName: input.name,
-    category: input.category === 'otro' ? (input.customCategory?.toLowerCase().trim() || 'otro') : input.category,
-    customCategory: input.category === 'otro' ? input.customCategory : undefined,
+    name: safeName,
+    realName: safeName,
+    category: safeCategory === 'otro' ? (safeCustomCategory?.toLowerCase().trim() || 'otro') : safeCategory,
+    customCategory: safeCategory === 'otro' ? safeCustomCategory : undefined,
     isProtected: false,
     avatar: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80',
-    phone: input.phone,
-    zoneName: input.zoneName || 'Balcarce Centro',
+    phone: safePhone,
+    zoneName: safeZone,
     location: {
       lat: BALCARCE_CENTER.lat + (Math.random() * 0.01 - 0.005),
       lng: BALCARCE_CENTER.lng + (Math.random() * 0.01 - 0.005)
     },
-    coverageRadiusKm: input.coverageRadiusKm || 6,
+    coverageRadiusKm: Math.min(Math.max(input.coverageRadiusKm || 6, 1), 30),
     isVerified: false,
     dniStatus: 'pending', // PENDIENTE DE REVISIÓN EN ADMIN CON SU FOTO
-    dniDocumentUrl: input.dniPhotoUrl,
-    isMatriculado: input.isMatriculado,
-    matriculaNumber: input.isMatriculado ? input.matriculaNumber : undefined,
-    matriculaStatus: input.isMatriculado ? 'pending' : 'none',
+    dniDocumentUrl: safeDniPhoto,
+    isMatriculado: Boolean(input.isMatriculado && safeMatricula),
+    matriculaNumber: input.isMatriculado ? safeMatricula : undefined,
+    matriculaStatus: input.isMatriculado && safeMatricula ? 'pending' : 'none',
     isPremium: false,
     rating: 5.0,
     reviewCount: 0,
     punctualityScore: 100,
     servicesCompleted: 0,
-    bio: input.bio || `Profesional de oficio en Balcarce. Soluciones con garantía y puntualidad asegurada.`,
+    bio: safeBio || 'Profesional de oficio en Balcarce. Soluciones con garantía y puntualidad asegurada.',
     experienceYears: 4,
     createdAt: new Date().toISOString().split('T')[0]
   };
 
   createProvider(newProvider);
 
-  // Create user in auth database
+  // 4. Crear usuario en la base auth
   const newUser: AuthUser = {
     id: `usr-${newProviderId}`,
-    name: input.name,
+    name: safeName,
     role: 'prestador',
-    phone: input.phone,
+    phone: safePhone,
     password: input.password || '1234',
-    dniPhotoUrl: input.dniPhotoUrl,
+    dniPhotoUrl: safeDniPhoto,
     providerId: newProviderId,
     createdAt: new Date().toISOString()
   };
 
-  const users = getRegisteredUsers();
-  users.push(newUser);
-  saveRegisteredUsers(users);
+  existingUsers.push(newUser);
+  saveRegisteredUsers(existingUsers);
 
   setCurrentUser(newUser);
   return { success: true, user: newUser };
 }
 
-// 3. CLIENTE / VECINO LOGIN & REGISTRO
+// 3. CLIENTE / VECINO LOGIN & REGISTRO SEGURO
 export function loginCliente(
   phone: string,
   password?: string
-): { success: boolean; user?: AuthUser; error?: string } {
-  const cleanPhone = phone.replace(/[^0-9]/g, '');
-  const users = getRegisteredUsers();
+): { success: boolean; user?: AuthUser; error?: string; isLocked?: boolean; remainingSeconds?: number } {
+  const cleanPhone = sanitizePhone(phone);
+  if (!cleanPhone || cleanPhone.length < 6) {
+    return { success: false, error: 'Ingresá un número de teléfono válido.' };
+  }
 
+  if (detectMaliciousPayload(phone) || (password && detectMaliciousPayload(password))) {
+    return { success: false, error: 'Se detectaron caracteres no permitidos.' };
+  }
+
+  const rateLimitKey = `client_login_${cleanPhone}`;
+  const check = checkRateLimit(rateLimitKey);
+
+  if (!check.allowed) {
+    return {
+      success: false,
+      isLocked: true,
+      remainingSeconds: check.remainingSeconds,
+      error: `Demasiados intentos fallidos. Esperá ${check.remainingSeconds} segundos antes de reintentar.`
+    };
+  }
+
+  const users = getRegisteredUsers();
   const user = users.find(
-    u => u.role === 'cliente' && u.phone?.replace(/[^0-9]/g, '') === cleanPhone
+    u => u.role === 'cliente' && sanitizePhone(u.phone) === cleanPhone
   );
 
   if (!user) {
-    return { success: false, error: 'No encontramos una cuenta con ese teléfono. Podés registrarte en un clic abajo.' };
+    const failed = recordFailedAttempt(rateLimitKey);
+    return { 
+      success: false, 
+      error: failed.locked
+        ? `Acceso temporalmente bloqueado por ${failed.remainingSeconds}s.`
+        : 'No encontramos una cuenta con ese teléfono. Podés registrarte en un clic abajo.' 
+    };
   }
 
   if (password && user.password && user.password !== password) {
-    return { success: false, error: 'Contraseña incorrecta.' };
+    const failed = recordFailedAttempt(rateLimitKey);
+    if (failed.locked) {
+      return {
+        success: false,
+        isLocked: true,
+        remainingSeconds: failed.remainingSeconds,
+        error: `Superaste los intentos permitidos. Bloqueo temporal por ${failed.remainingSeconds} segundos.`
+      };
+    }
+    return { 
+      success: false, 
+      error: `Contraseña incorrecta. Te quedan ${failed.attemptsLeft} intentos.` 
+    };
   }
 
+  resetRateLimit(rateLimitKey);
   setCurrentUser(user);
   return { success: true, user };
 }
@@ -260,23 +434,50 @@ export function registerCliente(input: {
   password?: string;
   address?: string;
 }): { success: boolean; user?: AuthUser; error?: string } {
-  if (!input.name || !input.phone) {
-    return { success: false, error: 'Por favor ingresá tu nombre y teléfono.' };
+  const safeName = sanitizeTextInput(input.name, 60);
+  const safePhone = sanitizePhone(input.phone);
+  const safeAddress = sanitizeTextInput(input.address, 100) || 'Balcarce, Bs. As.';
+
+  if (detectMaliciousPayload(input.name) || detectMaliciousPayload(input.phone) || detectMaliciousPayload(input.address)) {
+    return { success: false, error: 'Caracteres inválidos en los campos de registro.' };
+  }
+
+  if (!safeName || safeName.length < 3) {
+    return { success: false, error: 'Ingresá tu nombre y apellido completo.' };
+  }
+
+  if (!safePhone || safePhone.length < 7) {
+    return { success: false, error: 'Ingresá un número de teléfono válido.' };
+  }
+
+  if (input.password && (input.password.length < 4 || input.password.length > 128)) {
+    return { success: false, error: 'La contraseña debe tener entre 4 y 128 caracteres.' };
+  }
+
+  const existingUsers = getRegisteredUsers();
+  const phoneExists = existingUsers.some(
+    u => u.role === 'cliente' && sanitizePhone(u.phone) === safePhone
+  );
+
+  if (phoneExists) {
+    return { 
+      success: false, 
+      error: 'Ya existe una cuenta de vecino con este número. Por favor, iniciá sesión.' 
+    };
   }
 
   const newUser: AuthUser = {
     id: `usr-client-${Date.now().toString(36)}`,
-    name: input.name,
-    phone: input.phone,
+    name: safeName,
+    phone: safePhone,
     password: input.password || '1234',
-    address: input.address || 'Balcarce, Bs. As.',
+    address: safeAddress,
     role: 'cliente',
     createdAt: new Date().toISOString()
   };
 
-  const users = getRegisteredUsers();
-  users.push(newUser);
-  saveRegisteredUsers(users);
+  existingUsers.push(newUser);
+  saveRegisteredUsers(existingUsers);
 
   setCurrentUser(newUser);
   return { success: true, user: newUser };

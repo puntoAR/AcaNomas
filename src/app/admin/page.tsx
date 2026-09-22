@@ -31,6 +31,21 @@ export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [lockCountdown, setLockCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (lockCountdown === null || lockCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setLockCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          setLoginError('');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockCountdown]);
 
   const loadData = () => {
     setProviders(getProviders());
@@ -47,8 +62,12 @@ export default function AdminDashboardPage() {
     setLoginError('');
     const res = loginAsAdmin(passwordInput);
     if (res.success) {
+      setLockCountdown(null);
       loadData();
     } else {
+      if (res.isLocked && res.remainingSeconds) {
+        setLockCountdown(res.remainingSeconds);
+      }
       setLoginError(res.error || 'Clave incorrecta');
     }
   };
@@ -138,15 +157,28 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              {loginError && (
+              {lockCountdown !== null && lockCountdown > 0 && (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 animate-pulse">
+                  🔒 Demasiados intentos fallidos. Panel bloqueado por seguridad: <strong>{lockCountdown}s</strong> restantes.
+                </div>
+              )}
+
+              {loginError && lockCountdown === null && (
                 <p className="text-xs text-rose-600 font-medium">{loginError}</p>
               )}
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl font-black text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/25 active:scale-98 transition-all"
+                disabled={Boolean(lockCountdown && lockCountdown > 0)}
+                className={`w-full py-3 rounded-xl font-black text-xs text-white shadow-md active:scale-98 transition-all ${
+                  lockCountdown && lockCountdown > 0
+                    ? 'bg-slate-400 cursor-not-allowed opacity-60'
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25'
+                }`}
               >
-                Desbloquear Panel
+                {lockCountdown && lockCountdown > 0
+                  ? `🔒 Bloqueado (${lockCountdown}s)`
+                  : 'Desbloquear Panel'}
               </button>
 
               <button

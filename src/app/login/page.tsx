@@ -46,9 +46,25 @@ function LoginForm() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const categories = getCategories();
 
-  // General error / success message
+  // General error / success message & Security Lockout
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [lockCountdown, setLockCountdown] = useState<number | null>(null);
+
+  // Countdown timer for security lockout
+  useEffect(() => {
+    if (lockCountdown === null || lockCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setLockCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          setErrorMsg('');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockCountdown]);
 
   // Form Fields - Common
   const [phone, setPhone] = useState('');
@@ -72,10 +88,23 @@ function LoginForm() {
     setCurrentUser(getCurrentUser());
   }, []);
 
-  // Handle DNI file upload & preview
+  // Handle DNI file upload & preview with security validation
   const handleDniUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 1. Validar tipo MIME estricto (solo imágenes reales, NO SVG que puedan contener XSS)
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedMimes.includes(file.type.toLowerCase())) {
+        setErrorMsg('Formato de archivo no permitido. Solo se aceptan fotos reales en JPG, PNG o WebP.');
+        return;
+      }
+
+      // 2. Validar tamaño de archivo (máx 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMsg('El archivo es demasiado pesado. El tamaño máximo para el documento es de 5MB.');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setDniPhotoUrl(reader.result as string);
@@ -101,8 +130,12 @@ function LoginForm() {
     if (role === 'admin') {
       const res = loginAsAdmin(password);
       if (res.success) {
+        setLockCountdown(null);
         router.push(redirectTarget || '/admin');
       } else {
+        if (res.isLocked && res.remainingSeconds) {
+          setLockCountdown(res.remainingSeconds);
+        }
         setErrorMsg(res.error || 'Credenciales incorrectas');
       }
       return;
@@ -113,8 +146,12 @@ function LoginForm() {
       if (mode === 'login') {
         const res = loginPrestador(phone, password);
         if (res.success) {
+          setLockCountdown(null);
           router.push(redirectTarget || '/panel-prestador');
         } else {
+          if (res.isLocked && res.remainingSeconds) {
+            setLockCountdown(res.remainingSeconds);
+          }
           setErrorMsg(res.error || 'Error al iniciar sesión');
         }
       } else {
@@ -153,8 +190,12 @@ function LoginForm() {
       if (mode === 'login') {
         const res = loginCliente(phone, password);
         if (res.success) {
+          setLockCountdown(null);
           router.push(redirectTarget || '/mis-turnos');
         } else {
+          if (res.isLocked && res.remainingSeconds) {
+            setLockCountdown(res.remainingSeconds);
+          }
           setErrorMsg(res.error || 'Error al iniciar sesión');
         }
       } else {
@@ -324,8 +365,23 @@ function LoginForm() {
 
             {/* FORM CONTAINER */}
             <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4">
+              {/* Security Lockout Banner */}
+              {lockCountdown !== null && lockCountdown > 0 && (
+                <div className="p-4 rounded-2xl bg-rose-100 border-2 border-rose-300 text-xs font-semibold text-rose-900 flex items-start gap-2.5 animate-pulse">
+                  <Lock className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-black text-rose-950 uppercase tracking-wide">
+                      Acceso Temporalmente Bloqueado por Seguridad
+                    </h5>
+                    <p className="mt-0.5 text-[11px] text-rose-800 leading-relaxed">
+                      Se detectaron múltiples intentos erróneos. Para proteger la red barrial contra ataques automatizados, el acceso está suspendido por <strong>{lockCountdown} segundos</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Alert Messages */}
-              {errorMsg && (
+              {errorMsg && lockCountdown === null && (
                 <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
@@ -554,9 +610,18 @@ function LoginForm() {
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl font-black text-xs text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-md shadow-orange-500/20 active:scale-98 transition-all"
+                    disabled={Boolean(lockCountdown && lockCountdown > 0)}
+                    className={`w-full py-3 rounded-xl font-black text-xs text-white shadow-md active:scale-98 transition-all ${
+                      lockCountdown && lockCountdown > 0
+                        ? 'bg-slate-400 cursor-not-allowed opacity-60'
+                        : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-orange-500/20'
+                    }`}
                   >
-                    {mode === 'login' ? 'Iniciar Sesión como Prestador' : 'Crear Cuenta y Enviar DNI'}
+                    {lockCountdown && lockCountdown > 0
+                      ? `🔒 Bloqueado por seguridad (${lockCountdown}s)`
+                      : mode === 'login'
+                        ? 'Iniciar Sesión como Prestador'
+                        : 'Crear Cuenta y Enviar DNI'}
                   </button>
                 </>
               )}
@@ -652,9 +717,18 @@ function LoginForm() {
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl font-black text-xs text-white bg-slate-900 hover:bg-slate-800 shadow-md active:scale-98 transition-all"
+                    disabled={Boolean(lockCountdown && lockCountdown > 0)}
+                    className={`w-full py-3 rounded-xl font-black text-xs text-white shadow-md active:scale-98 transition-all ${
+                      lockCountdown && lockCountdown > 0
+                        ? 'bg-slate-400 cursor-not-allowed opacity-60'
+                        : 'bg-slate-900 hover:bg-slate-800'
+                    }`}
                   >
-                    {mode === 'login' ? 'Iniciar Sesión como Vecino' : 'Crear mi Cuenta de Vecino'}
+                    {lockCountdown && lockCountdown > 0
+                      ? `🔒 Bloqueado por seguridad (${lockCountdown}s)`
+                      : mode === 'login'
+                        ? 'Iniciar Sesión como Vecino'
+                        : 'Crear mi Cuenta de Vecino'}
                   </button>
                 </>
               )}
@@ -678,6 +752,7 @@ function LoginForm() {
                       <input
                         type="password"
                         required
+                        maxLength={128}
                         placeholder="Contraseña (admin123)"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -688,9 +763,16 @@ function LoginForm() {
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl font-black text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 active:scale-98 transition-all"
+                    disabled={Boolean(lockCountdown && lockCountdown > 0)}
+                    className={`w-full py-3 rounded-xl font-black text-xs text-white shadow-md active:scale-98 transition-all ${
+                      lockCountdown && lockCountdown > 0
+                        ? 'bg-slate-400 cursor-not-allowed opacity-60'
+                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
+                    }`}
                   >
-                    Ingresar al Panel Administrador
+                    {lockCountdown && lockCountdown > 0
+                      ? `🔒 Bloqueado por seguridad (${lockCountdown}s)`
+                      : 'Ingresar al Panel Administrador'}
                   </button>
 
                   <button

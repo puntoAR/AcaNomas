@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { X, Calendar, Clock, MapPin, Phone, User, FileText, MessageCircle, Sparkles } from 'lucide-react';
 import { Provider, ServiceRequest } from '@/types';
 import { createServiceRequest } from '@/lib/store';
+import {
+  sanitizeTextInput,
+  sanitizePhone,
+  detectMaliciousPayload,
+  checkRequestSpamCooldown,
+  recordRequestSubmission
+} from '@/lib/security';
 
 interface ServiceRequestModalProps {
   provider: Provider | null;
@@ -30,12 +37,57 @@ export default function ServiceRequestModal({
   });
   const [agreedTime, setAgreedTime] = useState('16:00');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Honeypot anti-bot field (debe permanecer vacío para humanos)
+  const [honeypotUrl, setHoneypotUrl] = useState('');
 
   if (!isOpen || !provider) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName || !clientPhone || !clientAddress) return;
+    setErrorMessage('');
+
+    // 1. Control Anti-Bot Honeypot: Si un bot llenó el campo oculto, descartar
+    if (honeypotUrl) {
+      console.warn('Bot detectado en formulario de solicitud.');
+      onClose();
+      return;
+    }
+
+    // 2. Control Anti-Spam Cooldown
+    const cooldown = checkRequestSpamCooldown();
+    if (!cooldown.allowed) {
+      setErrorMessage(`Esperá ${cooldown.remainingSeconds} segundos antes de enviar otra solicitud.`);
+      return;
+    }
+
+    // 3. Detección de inyecciones maliciosas
+    if (
+      detectMaliciousPayload(clientName) ||
+      detectMaliciousPayload(clientPhone) ||
+      detectMaliciousPayload(clientAddress) ||
+      detectMaliciousPayload(description)
+    ) {
+      setErrorMessage('Se detectaron caracteres o instrucciones no permitidas.');
+      return;
+    }
+
+    // 4. Sanitización rigurosa de entradas
+    const safeClientName = sanitizeTextInput(clientName, 60);
+    const safeClientPhone = sanitizePhone(clientPhone);
+    const safeClientAddress = sanitizeTextInput(clientAddress, 100);
+    const safeDescription = sanitizeTextInput(description, 350) || `Consulta por servicio de ${provider.category}`;
+
+    if (!safeClientName || safeClientName.length < 3) {
+      setErrorMessage('Ingresá tu nombre completo.');
+      return;
+    }
+
+    if (!safeClientPhone || safeClientPhone.length < 6) {
+      setErrorMessage('Ingresá un número de teléfono o WhatsApp válido.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -44,32 +96,33 @@ export default function ServiceRequestModal({
     const newRequest: ServiceRequest = {
       id: newRequestId,
       providerId: provider.id,
-      clientName,
-      clientPhone,
-      clientAddress,
+      clientName: safeClientName,
+      clientPhone: safeClientPhone,
+      clientAddress: safeClientAddress,
       clientCoords: {
         lat: provider.location.lat + (Math.random() * 0.008 - 0.004),
         lng: provider.location.lng + (Math.random() * 0.008 - 0.004)
       },
       serviceCategory: provider.category,
-      description: description || `Consulta por servicio de ${provider.category}`,
+      description: safeDescription,
       agreedDate,
       agreedTime,
-      status: 'confirmado', // Para demo lo dejamos confirmado
+      status: 'confirmado',
       providerCurrentLocation: provider.location,
       estimatedArrivalMinutes: 10,
       createdAt: new Date().toISOString()
     };
 
     createServiceRequest(newRequest);
+    recordRequestSubmission();
 
-    // Build WhatsApp message
+    // Build WhatsApp message con texto sanitizado
     const waText = encodeURIComponent(
       `¡Hola ${provider.name}! Vi tu perfil en AcáNomás (Balcarce).\n\n` +
-      `👤 Mi nombre: ${clientName}\n` +
-      `📍 Mi dirección: ${clientAddress}\n` +
+      `👤 Mi nombre: ${safeClientName}\n` +
+      `📍 Mi dirección: ${safeClientAddress}\n` +
       `📅 Fecha y hora propuesta: ${agreedDate} a las ${agreedTime} hs\n` +
-      `🔧 Motivo: ${description || 'Presupuesto y visita'}\n\n` +
+      `🔧 Motivo: ${safeDescription}\n\n` +
       `¿Podrías confirmarme si tenés disponibilidad? ¡Muchas gracias!`
     );
 
@@ -115,6 +168,24 @@ export default function ServiceRequestModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4">
+          {/* Honeypot anti-spam invisible para humanos */}
+          <div style={{ display: 'none' }} aria-hidden="true">
+            <input
+              type="text"
+              name="company_website_url"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypotUrl}
+              onChange={(e) => setHoneypotUrl(e.target.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700 animate-in fade-in">
+              {errorMessage}
+            </div>
+          )}
+
           <div className="bg-orange-50/80 border border-orange-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-orange-900">
             <Sparkles className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
             <span>

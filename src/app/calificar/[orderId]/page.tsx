@@ -3,10 +3,12 @@
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Star, Clock, CheckCircle2, ArrowLeft, ThumbsUp, Sparkles, MessageSquare } from 'lucide-react';
+import { Star, Clock, CheckCircle2, ArrowLeft, ThumbsUp, Sparkles, MessageSquare, ShieldAlert } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { ServiceRequest, Provider, Review } from '@/types';
 import { getServiceRequestById, getProviderById, addReview } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
+import { sanitizeTextInput, detectMaliciousPayload } from '@/lib/security';
 
 interface PageProps {
   params: Promise<{ orderId: string }>;
@@ -17,6 +19,7 @@ export default function CalificarServicioPage({ params }: PageProps) {
   const router = useRouter();
   const [request, setRequest] = useState<ServiceRequest | null>(null);
   const [provider, setProvider] = useState<Provider | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Ratings (1 to 5)
   const [punctualityRating, setPunctualityRating] = useState(5);
@@ -49,10 +52,41 @@ export default function CalificarServicioPage({ params }: PageProps) {
     );
   }
 
+  // 1. CONTROL ANTI-FRAUDE: AUTO-CALIFICACIÓN
+  const currentUser = getCurrentUser();
+  const isSelfRating = Boolean(
+    currentUser && 
+    (currentUser.providerId === provider.id || currentUser.id === `usr-${provider.id}` || currentUser.name === provider.name)
+  );
+
+  // 2. CONTROL ANTI-FRAUDE: ESTADO DEL SERVICIO
+  const isServiceConcluded = request.status === 'llegado' || request.status === 'finalizado';
+
+  // 3. CONTROL ANTI-FRAUDE: DUPLICACIÓN
+  const isAlreadyRated = Boolean(request.clientRated);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
+    if (isSelfRating) {
+      setErrorMessage('Control de seguridad: No podés calificar tu propio servicio.');
+      return;
+    }
+
+    if (isAlreadyRated) {
+      setErrorMessage('Este turno ya ha sido calificado anteriormente.');
+      return;
+    }
+
+    if (detectMaliciousPayload(comment)) {
+      setErrorMessage('El comentario contiene caracteres o instrucciones no permitidas.');
+      return;
+    }
+
     setIsSubmitting(true);
 
+    const safeComment = sanitizeTextInput(comment, 400);
     const averageRating = parseFloat(
       ((punctualityRating + qualityRating + priceRating) / 3).toFixed(1)
     );
@@ -61,17 +95,23 @@ export default function CalificarServicioPage({ params }: PageProps) {
       id: 'rev-' + Date.now().toString(36),
       orderId: request.id,
       providerId: provider.id,
-      clientName: request.clientName,
+      clientName: sanitizeTextInput(request.clientName, 50),
       punctualityRating,
       qualityRating,
       priceRating,
       averageRating,
-      comment: comment || 'Muy buen trabajo y predisposición.',
+      comment: safeComment || 'Muy buen trabajo y predisposición.',
       punctualityTag: request.punctualityResult,
       createdAt: new Date().toISOString().split('T')[0]
     };
 
-    addReview(newReview);
+    const added = addReview(newReview);
+    if (!added) {
+      setErrorMessage('No fue posible guardar la calificación. Puede que ya haya sido registrada.');
+      setIsSubmitting(false);
+      return;
+    }
+
     setSubmitted(true);
     setIsSubmitting(false);
 
@@ -117,7 +157,64 @@ export default function CalificarServicioPage({ params }: PageProps) {
           <span>Volver al seguimiento</span>
         </Link>
 
-        {submitted ? (
+        {/* 1. BLOQUEO ANTI-FRAUDE: AUTO-CALIFICACIÓN */}
+        {isSelfRating ? (
+          <div className="bg-white rounded-3xl border border-rose-200 p-8 text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900">Control Anti-Fraude Activo</h2>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+              Estás identificado como el prestador de este servicio (<strong>{provider.name}</strong>). Para proteger la veracidad y transparencia de las opiniones vecinales en Balcarce, <strong>no está permitido auto-calificarse</strong>.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/panel-prestador"
+                className="inline-block px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors shadow-sm"
+              >
+                Ir a mi Panel de Prestador
+              </Link>
+            </div>
+          </div>
+        ) : isAlreadyRated ? (
+          /* 2. BLOQUEO: YA FUE CALIFICADO */
+          <div className="bg-white rounded-3xl border border-emerald-200 p-8 text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900">Servicio Ya Calificado</h2>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+              Este turno ya recibió su calificación vecinal. Cada visita puede puntuarse una única vez para garantizar la autenticidad de la reputación barrial.
+            </p>
+            <div className="pt-2">
+              <Link
+                href={`/profesional/${provider.id}`}
+                className="inline-block px-5 py-2.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 transition-colors shadow-sm"
+              >
+                Ver perfil público de {provider.name}
+              </Link>
+            </div>
+          </div>
+        ) : !isServiceConcluded ? (
+          /* 3. BLOQUEO: VISITA EN CURSO */
+          <div className="bg-white rounded-3xl border border-amber-200 p-8 text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+              <Clock className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900">Visita Aún en Curso</h2>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+              Para calificar a un profesional, la visita debe haber concluido o el prestador debe haber registrado su llegada en el mapa con el GPS.
+            </p>
+            <div className="pt-2">
+              <Link
+                href={`/seguimiento/${request.id}`}
+                className="inline-block px-5 py-2.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 transition-colors shadow-sm"
+              >
+                Ver seguimiento GPS en vivo
+              </Link>
+            </div>
+          </div>
+        ) : submitted ? (
           <div className="bg-white rounded-3xl border border-emerald-200 p-8 text-center space-y-3 shadow-xl">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-10 h-10" />
@@ -152,6 +249,13 @@ export default function CalificarServicioPage({ params }: PageProps) {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {errorMessage && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
               {/* Criterion 1: Puntualidad */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">

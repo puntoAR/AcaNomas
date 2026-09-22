@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { Provider } from '@/types';
 import { BALCARCE_CENTER } from '@/lib/store';
+import { escapeHtml, sanitizeImageUrl } from '@/lib/security';
 
 interface MapCoverageProps {
   providers: Provider[];
@@ -86,7 +87,12 @@ export default function MapCoverage({
         dashArray: isSelected ? undefined : '4, 6'
       }).addTo(layerGroup);
 
-      // Custom icon for provider base
+      // Custom icon for provider base (XSS Protected)
+      const safeName = escapeHtml(provider.name);
+      const safeAvatar = sanitizeImageUrl(provider.avatar);
+      const safeCategory = escapeHtml(provider.category);
+      const safeZone = escapeHtml(provider.zoneName);
+
       const markerHtml = `
         <div class="relative group cursor-pointer transition-transform ${isSelected ? 'scale-125 z-30' : 'hover:scale-110'}">
           <div class="w-10 h-10 rounded-2xl overflow-hidden shadow-lg border-2 ${
@@ -96,7 +102,7 @@ export default function MapCoverage({
                 ? 'border-amber-400 ring-2 ring-amber-400/40' 
                 : 'border-white'
           } bg-white flex items-center justify-center">
-            <img src="${provider.avatar}" alt="${provider.name}" class="w-full h-full object-cover" />
+            <img src="${safeAvatar}" alt="${safeName}" class="w-full h-full object-cover" />
           </div>
           ${provider.isPremium ? `
             <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center text-[10px] font-bold shadow-xs">
@@ -119,16 +125,16 @@ export default function MapCoverage({
         zIndexOffset: isSelected ? 1000 : provider.isPremium ? 500 : 100
       }).addTo(layerGroup);
 
-      // Popup with quick details
+      // Popup with quick details (XSS Protected)
       marker.bindPopup(`
         <div class="p-1 text-slate-900 font-sans min-w-[180px]">
           <div class="flex items-center gap-1.5 font-bold text-sm">
-            <span>${provider.name}</span>
+            <span>${safeName}</span>
             ${provider.isPremium ? '<span class="text-amber-500 text-xs">👑</span>' : ''}
           </div>
-          <div class="text-xs text-orange-600 font-semibold uppercase">${provider.category}</div>
-          <div class="text-xs text-slate-500 mt-0.5">${provider.zoneName}</div>
-          <div class="text-xs font-medium text-emerald-700 mt-1">Cobertura: Radio ${provider.coverageRadiusKm} km</div>
+          <div class="text-xs text-orange-600 font-semibold uppercase">${safeCategory}</div>
+          <div class="text-xs text-slate-500 mt-0.5">${safeZone}</div>
+          <div class="text-xs font-medium text-emerald-700 mt-1">Cobertura: Radio ${Math.round(provider.coverageRadiusKm)} km</div>
         </div>
       `);
 

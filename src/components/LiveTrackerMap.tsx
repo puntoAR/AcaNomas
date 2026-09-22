@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { ServiceRequest, Provider } from '@/types';
 import { Navigation, Home, Clock, AlertCircle } from 'lucide-react';
+import { escapeHtml } from '@/lib/security';
 
 interface LiveTrackerMapProps {
   request: ServiceRequest;
@@ -77,7 +78,7 @@ export default function LiveTrackerMap({
             <svg class="w-6 h-6 text-amber-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
           </div>
           <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md bg-slate-900 text-white text-[9px] font-black uppercase whitespace-nowrap shadow-xs">
-            ${provider.name.split(' ')[0]}
+            ${escapeHtml(provider.name.split(' ')[0])}
           </span>
         </div>
       `,
