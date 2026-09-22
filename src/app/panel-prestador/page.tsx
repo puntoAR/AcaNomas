@@ -18,18 +18,26 @@ import {
   Award
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
-import { Provider, ServiceRequest } from '@/types';
+import { Provider, ServiceRequest, AuthUser } from '@/types';
 import { getProviders, getServiceRequests, updateServiceRequest } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
 
 export default function ProviderDashboardPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('prov-roberto-gomez');
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const loadData = () => {
     const provs = getProviders();
     setProviders(provs);
     setRequests(getServiceRequests());
+    
+    const user = getCurrentUser();
+    setCurrentUser(user);
+    if (user?.role === 'prestador' && user.providerId) {
+      setSelectedProviderId(user.providerId);
+    }
   };
 
   useEffect(() => {

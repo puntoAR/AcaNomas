@@ -20,22 +20,43 @@ import {
   Check
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
-import { Provider, Category } from '@/types';
+import { Provider, Category, AuthUser } from '@/types';
 import { getProviders, updateProvider, getCategories, addCategory } from '@/lib/store';
+import { getCurrentUser, loginAsAdmin, logout } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeTab, setActiveTab] = useState<'verificaciones' | 'prestadores' | 'rubros'>('verificaciones');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const loadData = () => {
     setProviders(getProviders());
     setCategories(getCategories());
+    setCurrentUser(getCurrentUser());
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    const res = loginAsAdmin(passwordInput);
+    if (res.success) {
+      loadData();
+    } else {
+      setLoginError(res.error || 'Clave incorrecta');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    logout();
+    setCurrentUser(null);
+  };
 
   const pendingDni = providers.filter(p => p.dniStatus === 'pending');
   const pendingMatricula = providers.filter(p => p.matriculaStatus === 'pending');
@@ -83,6 +104,65 @@ export default function AdminDashboardPage() {
     loadData();
   };
 
+  if (!currentUser || currentUser.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col pb-16">
+        <Navbar />
+        <main className="flex-1 max-w-md w-full mx-auto px-4 py-12 flex flex-col justify-center">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 sm:p-8 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-md">
+              <ShieldCheck className="w-9 h-9" />
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                Área Restringida
+              </span>
+              <h1 className="text-xl font-black text-slate-900 mt-2">Panel de Administración</h1>
+              <p className="text-xs text-slate-500 mt-1">
+                Ingresá tu clave de moderador para gestionar validaciones de DNI, matrículas y estatus Premium en Balcarce.
+              </p>
+            </div>
+
+            <form onSubmit={handleAdminLogin} className="space-y-3 pt-2 text-left">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Contraseña de Administrador
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Contraseña (admin123)"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                />
+              </div>
+
+              {loginError && (
+                <p className="text-xs text-rose-600 font-medium">{loginError}</p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl font-black text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/25 active:scale-98 transition-all"
+              >
+                Desbloquear Panel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPasswordInput('admin123')}
+                className="w-full text-center text-[11px] text-slate-400 hover:text-slate-600"
+              >
+                (Autocompletar clave de prueba: admin123)
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col pb-16">
       <Navbar />
@@ -94,9 +174,17 @@ export default function AdminDashboardPage() {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-300">
-                Backoffice de Moderación
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-300">
+                  Backoffice de Moderación
+                </span>
+                <button
+                  onClick={handleAdminLogout}
+                  className="text-[10px] text-rose-300 hover:text-rose-100 underline"
+                >
+                  (Cerrar sesión)
+                </button>
+              </div>
               <h1 className="text-xl sm:text-2xl font-black">Admin AcáNomás Balcarce</h1>
               <p className="text-xs text-slate-400">
                 Control de identidades, matrículas oficiales y asignación de Escudo Premium.

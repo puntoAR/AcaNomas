@@ -107,3 +107,14 @@ export interface Review {
   punctualityTag?: PunctualityStatus;
   createdAt: string;
 }
+
+export type UserRole = 'admin' | 'prestador' | 'cliente';
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  phone?: string;
+  email?: string;
+  providerId?: string; // Id de prestador vinculado si su rol es 'prestador'
+}

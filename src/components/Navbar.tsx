@@ -11,17 +11,24 @@ import {
   Menu, 
   X,
   Compass,
-  Navigation
+  Navigation,
+  LogIn,
+  LogOut,
+  User,
+  Crown
 } from 'lucide-react';
 import { getProviders, getServiceRequests } from '@/lib/store';
+import { getCurrentUser, logout } from '@/lib/auth';
+import { AuthUser } from '@/types';
 
 export default function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [hasEnCamino, setHasEnCamino] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
-  useEffect(() => {
+  const updateState = () => {
     const providers = getProviders();
     const pending = providers.filter(
       p => p.dniStatus === 'pending' || p.matriculaStatus === 'pending'
@@ -30,14 +37,29 @@ export default function Navbar() {
 
     const requests = getServiceRequests();
     setHasEnCamino(requests.some(r => r.status === 'en_camino'));
+
+    setCurrentUser(getCurrentUser());
+  };
+
+  useEffect(() => {
+    updateState();
+
+    const handleAuthChange = () => updateState();
+    window.addEventListener('auth-change', handleAuthChange);
+    return () => window.removeEventListener('auth-change', handleAuthChange);
   }, [pathname]);
+
+  const handleLogout = () => {
+    logout();
+    setCurrentUser(null);
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Slogan */}
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <div className="w-11 h-11 relative flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
               <img
                 src="/logo-icono-transparente.png"
@@ -54,14 +76,14 @@ export default function Navbar() {
                   Balcarce
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium -mt-0.5">
+              <p className="text-xs text-slate-500 font-medium -mt-0.5 hidden xs:block">
                 Tu oficio de confianza en 2 clics
               </p>
             </div>
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1.5">
+          <nav className="hidden lg:flex items-center gap-1.5">
             <Link
               href="/"
               className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
@@ -70,7 +92,7 @@ export default function Navbar() {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              Explorar Oficios
+              Explorar
             </Link>
 
             {/* Client Tracking consultation link */}
@@ -123,25 +145,71 @@ export default function Navbar() {
 
             <Link
               href="/ofrecer-servicio"
-              className="ml-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-sm shadow-orange-500/25 active:scale-95 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-sm shadow-orange-500/25 active:scale-95 transition-all"
             >
-              <Briefcase className="w-4 h-4" />
-              <span>Publicar mi Oficio</span>
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Publicar Oficio</span>
             </Link>
+
+            {/* Auth status chip / Login button */}
+            {currentUser ? (
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-800 transition-colors"
+                  title="Administrar sesión"
+                >
+                  {currentUser.role === 'admin' ? (
+                    <Crown className="w-3.5 h-3.5 text-indigo-600 fill-indigo-600" />
+                  ) : currentUser.role === 'prestador' ? (
+                    <UserCheck className="w-3.5 h-3.5 text-orange-600" />
+                  ) : (
+                    <User className="w-3.5 h-3.5 text-slate-600" />
+                  )}
+                  <span className="truncate max-w-[100px]">{currentUser.name.split(' ')[0]}</span>
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className="ml-1 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5 text-slate-600" />
+                <span>Ingresar</span>
+              </Link>
+            )}
           </nav>
 
-          {/* Mobile menu button and quick action */}
-          <div className="flex md:hidden items-center gap-2">
-            <Link
-              href="/mis-turnos"
-              className="relative inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-800 bg-orange-50 border border-orange-200 active:scale-95 transition-all"
-            >
-              <Navigation className="w-3.5 h-3.5 text-orange-600" />
-              <span>Mi Turno</span>
-              {hasEnCamino && (
-                <span className="w-2 h-2 rounded-full bg-orange-600"></span>
-              )}
-            </Link>
+          {/* Mobile quick actions & hamburger */}
+          <div className="flex lg:hidden items-center gap-2">
+            {currentUser ? (
+              <Link
+                href="/login"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200"
+              >
+                {currentUser.role === 'admin' ? (
+                  <Crown className="w-3.5 h-3.5 text-indigo-600" />
+                ) : (
+                  <User className="w-3.5 h-3.5 text-slate-600" />
+                )}
+                <span className="truncate max-w-[70px]">{currentUser.name.split(' ')[0]}</span>
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Ingresar</span>
+              </Link>
+            )}
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -156,11 +224,12 @@ export default function Navbar() {
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-2 shadow-lg animate-in slide-in-from-top-2 duration-150">
+        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-2 shadow-lg animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-slate-500 bg-slate-50 rounded-md">
             <MapPin className="w-3.5 h-3.5 text-orange-500" />
             <span>Área de cobertura: <strong>Balcarce, Bs. As.</strong></span>
           </div>
+
           <Link
             href="/"
             onClick={() => setMobileMenuOpen(false)}
@@ -170,6 +239,7 @@ export default function Navbar() {
           >
             🔍 Explorar Oficios
           </Link>
+
           <Link
             href="/mis-turnos"
             onClick={() => setMobileMenuOpen(false)}
@@ -185,6 +255,7 @@ export default function Navbar() {
               </span>
             )}
           </Link>
+
           <Link
             href="/panel-prestador"
             onClick={() => setMobileMenuOpen(false)}
@@ -195,6 +266,7 @@ export default function Navbar() {
               Panel de Prestador (Mis Turnos)
             </span>
           </Link>
+
           <Link
             href="/admin"
             onClick={() => setMobileMenuOpen(false)}
@@ -210,6 +282,18 @@ export default function Navbar() {
               </span>
             )}
           </Link>
+
+          <Link
+            href="/login"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-base font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <span className="flex items-center gap-2">
+              <LogIn className="w-5 h-5 text-slate-600" />
+              {currentUser ? `Sesión: ${currentUser.name}` : 'Iniciar Sesión (Admin / Usuario)'}
+            </span>
+          </Link>
+
           <Link
             href="/ofrecer-servicio"
             onClick={() => setMobileMenuOpen(false)}
@@ -217,6 +301,18 @@ export default function Navbar() {
           >
             Publicar mi Oficio Gratis
           </Link>
+
+          {currentUser && (
+            <button
+              onClick={() => {
+                handleLogout();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-center py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+            >
+              Cerrar Sesión
+            </button>
+          )}
         </div>
       )}
     </header>
