@@ -17,9 +17,12 @@ import {
   Star,
   ArrowLeft,
   Crown,
-  Sparkles
+  Sparkles,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import ServiceChat from '@/components/ServiceChat';
 import { ServiceRequest, Provider } from '@/types';
 import { getServiceRequestById, getProviderById, updateServiceRequest } from '@/lib/store';
 import { evaluatePunctuality } from '@/lib/punctuality';
@@ -142,6 +145,12 @@ export default function TrackingPage({ params }: PageProps) {
 
             {/* Status Pills */}
             <div className="self-start sm:self-auto">
+              {request.status === 'pendiente' && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  Pendiente de Confirmación
+                </span>
+              )}
               {request.status === 'en_camino' && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -164,6 +173,12 @@ export default function TrackingPage({ params }: PageProps) {
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
                   <RotateCcw className="w-3.5 h-3.5 text-purple-600" />
                   Reprogramado
+                </span>
+              )}
+              {request.status === 'cancelado' && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                  Cancelado
                 </span>
               )}
             </div>
@@ -237,6 +252,34 @@ export default function TrackingPage({ params }: PageProps) {
               </Link>
             </div>
           </div>
+        ) : request.status === 'pendiente' ? (
+          /* Waiting for provider to confirm */
+          <div className="bg-amber-50 rounded-3xl border border-amber-200 p-6 text-center space-y-3 mb-6">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Clock className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-bold text-amber-950">
+              Esperando que {provider.name} confirme la visita
+            </h3>
+            <p className="text-xs text-amber-800 max-w-md mx-auto leading-relaxed">
+              Solicitaste la visita para el <strong>{request.agreedDate}</strong> a las <strong>{request.agreedTime} hs</strong>. Podés chatear por WhatsApp o usar el Web Chat para acordar. Los números de teléfono directo se habilitarán en cuanto la visita sea confirmada.
+            </p>
+          </div>
+        ) : request.status === 'cancelado' ? (
+          /* Cancelled card */
+          <div className="bg-rose-50 rounded-3xl border border-rose-200 p-6 text-center space-y-3 mb-6">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-bold text-rose-950">
+              Esta solicitud o turno fue cancelado
+            </h3>
+            <p className="text-xs text-rose-800 max-w-md mx-auto">
+              {request.cancellationReason
+                ? `Motivo: "${request.cancellationReason}"`
+                : 'La prestación de servicio quedó desestimada.'}
+            </p>
+          </div>
         ) : (
           /* Waiting for provider to depart */
           <div className="bg-white rounded-3xl border border-slate-200 p-6 text-center space-y-3 mb-6">
@@ -252,8 +295,20 @@ export default function TrackingPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Provider Contact Card */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 flex items-center justify-between gap-4 shadow-xs">
+        {/* Integrated Web Chat & Coordination Module */}
+        <div className="mb-6">
+          <ServiceChat
+            request={request}
+            role="cliente"
+            currentUserName={request.clientName}
+            counterpartName={provider.name}
+            counterpartPhone={provider.phone}
+            onUpdateRequest={(updated) => setRequest({ ...updated })}
+          />
+        </div>
+
+        {/* Provider Contact Card with Phone Protection */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
               <img src={provider.avatar} alt={provider.name} className="w-full h-full object-cover" />
@@ -264,19 +319,48 @@ export default function TrackingPage({ params }: PageProps) {
                 {provider.isPremium && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />}
               </div>
               <p className="text-xs text-orange-600 font-semibold uppercase">{provider.category}</p>
-              <p className="text-[11px] text-slate-400">Tel: {provider.phone}</p>
+              
+              {request.phoneUnlocked ? (
+                <p className="text-xs font-bold text-emerald-700 flex items-center gap-1 mt-0.5">
+                  <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Tel: {provider.phone}</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                  <Lock className="w-3 h-3 text-amber-500" />
+                  <span>Tel: Protegido hasta acordar día/hora</span>
+                </p>
+              )}
             </div>
           </div>
 
-          <a
-            href={`https://wa.me/${provider.phone.replace(/[^0-9]/g, '')}`}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Chat WhatsApp</span>
-          </a>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            {request.phoneUnlocked ? (
+              <>
+                <a
+                  href={`tel:${provider.phone}`}
+                  className="px-3 py-2 rounded-xl font-bold text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 flex items-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>Llamar</span>
+                </a>
+                <a
+                  href={`https://wa.me/${provider.phone.replace(/[^0-9]/g, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp Directo</span>
+                </a>
+              </>
+            ) : (
+              <span className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span>Contacto protegido</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Demo Simulation Tool (Interactive testing for prompt evaluation) */}

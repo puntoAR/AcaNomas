@@ -196,6 +196,11 @@ export default function MisTurnosPage() {
 
                       {/* Status Badge */}
                       <div>
+                        {req.status === 'pendiente' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            Pendiente de confirmación
+                          </span>
+                        )}
                         {req.status === 'confirmado' && (
                           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
                             Confirmado
@@ -209,6 +214,11 @@ export default function MisTurnosPage() {
                         {req.status === 'reprogramado' && (
                           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
                             Reprogramado
+                          </span>
+                        )}
+                        {req.status === 'cancelado' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                            Cancelado
                           </span>
                         )}
                       </div>
@@ -230,7 +240,8 @@ export default function MisTurnosPage() {
                         href={`/seguimiento/${req.id}`}
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700"
                       >
-                        <span>Consultar detalle y mapa</span>
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Ver seguimiento y Web Chat</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </Link>
 

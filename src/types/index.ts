@@ -65,6 +65,28 @@ export type PunctualityStatus =
   | 'reprogramado'
   | 'pendiente';
 
+export interface ChatMessage {
+  id: string;
+  sender: 'cliente' | 'prestador' | 'sistema';
+  senderName: string;
+  text: string;
+  timestamp: string;
+  actionType?: 'confirm_visit' | 'propose_reschedule' | 'accept_reschedule' | 'cancel_service' | 'info';
+  actionMetadata?: {
+    date?: string;
+    time?: string;
+    reason?: string;
+  };
+}
+
+export interface RescheduleProposal {
+  proposedBy: 'cliente' | 'prestador';
+  proposedDate: string;        // YYYY-MM-DD
+  proposedTime: string;        // HH:MM
+  reason: string;
+  createdAt: string;
+}
+
 export interface ServiceRequest {
   id: string;
   providerId: string;
@@ -80,6 +102,11 @@ export interface ServiceRequest {
   agreedDate: string;        // YYYY-MM-DD
   agreedTime: string;        // HH:MM (ej. "16:00")
   status: ServiceStatus;
+  phoneUnlocked?: boolean;   // true = teléfonos accesibles tras acordar y confirmar visita
+  messages?: ChatMessage[];  // Historial de mensajes y avisos del chat web
+  pendingReschedule?: RescheduleProposal; // Propuesta de reprogramación a re-confirmar
+  cancellationReason?: string;
+  cancelledBy?: 'cliente' | 'prestador';
   enRouteAt?: string;        // ISO Date
   arrivedAt?: string;        // ISO Date
   punctualityResult?: PunctualityStatus;

@@ -1,4 +1,4 @@
-import { Provider, ServiceRequest, Review, Category, ServiceStatus } from '@/types';
+import { Provider, ServiceRequest, Review, Category, ServiceStatus, ChatMessage, RescheduleProposal } from '@/types';
 import { evaluatePunctuality } from './punctuality';
 
 export const BALCARCE_CENTER = {
@@ -190,6 +190,39 @@ export const INITIAL_REQUESTS: ServiceRequest[] = [
     agreedDate: '2026-09-22',
     agreedTime: '15:30',
     status: 'en_camino', // EN CAMINO (Para probar el mapa estilo Uber)
+    phoneUnlocked: true,
+    messages: [
+      {
+        id: 'msg-101-1',
+        sender: 'cliente',
+        senderName: 'Esteban Di Meglio',
+        text: 'Hola Roberto, solicité una revisión de calefactores para hoy a las 15:30 hs.',
+        timestamp: '2026-09-22T11:00:00.000Z'
+      },
+      {
+        id: 'msg-101-2',
+        sender: 'prestador',
+        senderName: 'Roberto Gómez',
+        text: 'Hola Esteban, perfecto. Confirmo la visita para hoy a las 15:30 hs. Llevo los repuestos de termocuplas y piloto.',
+        timestamp: '2026-09-22T11:15:00.000Z',
+        actionType: 'confirm_visit'
+      },
+      {
+        id: 'msg-101-3',
+        sender: 'sistema',
+        senderName: 'AcáNomás',
+        text: '✅ Visita confirmada para el 2026-09-22 a las 15:30 hs por Roberto Gómez. Teléfonos de contacto habilitados.',
+        timestamp: '2026-09-22T11:15:00.000Z',
+        actionType: 'confirm_visit'
+      },
+      {
+        id: 'msg-101-4',
+        sender: 'prestador',
+        senderName: 'Roberto Gómez',
+        text: '¡Voy saliendo hacia tu domicilio en Calle 16!',
+        timestamp: '2026-09-22T15:23:00.000Z'
+      }
+    ],
     enRouteAt: new Date(Date.now() - 1000 * 60 * 7).toISOString(), // Salió hace 7 minutos
     providerCurrentLocation: { lat: -37.8471, lng: -58.2540 },
     estimatedArrivalMinutes: 8,
@@ -207,6 +240,32 @@ export const INITIAL_REQUESTS: ServiceRequest[] = [
     agreedDate: '2026-09-22',
     agreedTime: '17:00',
     status: 'confirmado',
+    phoneUnlocked: true,
+    messages: [
+      {
+        id: 'msg-102-1',
+        sender: 'cliente',
+        senderName: 'Carla San Martín',
+        text: 'Hola Marisa, te envié la solicitud porque salta la térmica.',
+        timestamp: '2026-09-22T12:00:00.000Z'
+      },
+      {
+        id: 'msg-102-2',
+        sender: 'prestador',
+        senderName: 'Marisa López',
+        text: 'Hola Carla! Ya vi el pedido. Confirmo la visita hoy a las 17:00 hs.',
+        timestamp: '2026-09-22T12:20:00.000Z',
+        actionType: 'confirm_visit'
+      },
+      {
+        id: 'msg-102-3',
+        sender: 'sistema',
+        senderName: 'AcáNomás',
+        text: '✅ Visita confirmada para el 2026-09-22 a las 17:00 hs por Marisa López. Teléfonos de contacto habilitados.',
+        timestamp: '2026-09-22T12:20:00.000Z',
+        actionType: 'confirm_visit'
+      }
+    ],
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString()
   },
   {
@@ -221,12 +280,61 @@ export const INITIAL_REQUESTS: ServiceRequest[] = [
     agreedDate: '2026-09-22',
     agreedTime: '11:00',
     status: 'llegado',
+    phoneUnlocked: true,
+    messages: [
+      {
+        id: 'msg-103-1',
+        sender: 'sistema',
+        senderName: 'AcáNomás',
+        text: '✅ Visita confirmada para las 11:00 hs. Teléfonos de contacto habilitados.',
+        timestamp: '2026-09-22T08:30:00.000Z'
+      },
+      {
+        id: 'msg-103-2',
+        sender: 'prestador',
+        senderName: 'Carlos M.',
+        text: 'Llegué al domicilio.',
+        timestamp: '2026-09-22T10:55:00.000Z'
+      }
+    ],
     enRouteAt: '2026-09-22T10:45:00.000Z',
     arrivedAt: '2026-09-22T10:55:00.000Z', // Llegó 5 min antes
     punctualityResult: 'a_tiempo',
     minutesDiff: -5,
     clientRated: false,
     createdAt: '2026-09-22T08:00:00.000Z'
+  },
+  {
+    id: 'req-demo-104',
+    providerId: 'prov-carlos-plomero',
+    clientName: 'Valeria Rossi',
+    clientPhone: '5492266667788',
+    clientAddress: 'Calle 14 e/ 17 y 19 N° 630, Balcarce',
+    clientCoords: { lat: -37.8445, lng: -58.2530 },
+    serviceCategory: 'plomero',
+    description: 'Bomba presurizadora no arranca y gotea la llave de paso del patio.',
+    agreedDate: '2026-09-23',
+    agreedTime: '10:00',
+    status: 'pendiente', // PENDIENTE DE CONFIRMACIÓN DE DÍA Y HORA
+    phoneUnlocked: false,
+    messages: [
+      {
+        id: 'msg-104-1',
+        sender: 'cliente',
+        senderName: 'Valeria Rossi',
+        text: 'Hola Carlos, solicité tu servicio para mañana a las 10:00 hs. ¿Tendrás disponibilidad?',
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: 'msg-104-2',
+        sender: 'sistema',
+        senderName: 'AcáNomás',
+        text: '📌 Solicitud creada. El prestador debe confirmar el día y horario de la visita para habilitar los teléfonos de contacto directos.',
+        timestamp: new Date().toISOString(),
+        actionType: 'info'
+      }
+    ],
+    createdAt: new Date().toISOString()
   }
 ];
 
@@ -365,6 +473,198 @@ export function updateServiceRequest(id: string, updates: Partial<ServiceRequest
   requests[idx] = updated;
   saveServiceRequests(requests);
   return updated;
+}
+
+/**
+ * Agrega un mensaje al historial de chat de la solicitud
+ */
+export function addChatMessage(
+  orderId: string,
+  message: {
+    sender: 'cliente' | 'prestador' | 'sistema';
+    senderName: string;
+    text: string;
+    actionType?: ChatMessage['actionType'];
+    actionMetadata?: ChatMessage['actionMetadata'];
+  }
+): ChatMessage | undefined {
+  const requests = getServiceRequests();
+  const idx = requests.findIndex(r => r.id === orderId);
+  if (idx === -1) return undefined;
+
+  const newMsg: ChatMessage = {
+    id: 'msg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    sender: message.sender,
+    senderName: message.senderName,
+    text: message.text,
+    timestamp: new Date().toISOString(),
+    actionType: message.actionType,
+    actionMetadata: message.actionMetadata
+  };
+
+  const currentMessages = requests[idx].messages || [];
+  requests[idx].messages = [...currentMessages, newMsg];
+  saveServiceRequests(requests);
+  return newMsg;
+}
+
+/**
+ * Confirma el día y hora de visita por parte del prestador (o mutuo acuerdo)
+ * Habilita los números de teléfono de ambas partes y pasa a status 'confirmado'.
+ */
+export function confirmServiceVisit(
+  orderId: string,
+  confirmedByName: string,
+  agreedDate?: string,
+  agreedTime?: string
+): ServiceRequest | undefined {
+  const req = getServiceRequestById(orderId);
+  if (!req) return undefined;
+
+  const date = agreedDate || req.agreedDate;
+  const time = agreedTime || req.agreedTime;
+
+  const updated = updateServiceRequest(orderId, {
+    status: 'confirmado',
+    phoneUnlocked: true,
+    agreedDate: date,
+    agreedTime: time,
+    pendingReschedule: undefined
+  });
+
+  if (updated) {
+    addChatMessage(orderId, {
+      sender: 'sistema',
+      senderName: 'AcáNomás',
+      text: `✅ Visita confirmada para el ${date} a las ${time} hs por ${confirmedByName}. ¡Los números de contacto directos ya están visibles para ambas partes!`,
+      actionType: 'confirm_visit',
+      actionMetadata: { date, time }
+    });
+  }
+
+  return getServiceRequestById(orderId);
+}
+
+/**
+ * Propone reprogramar el turno (cliente o prestador).
+ * Cambia el estado a 'reprogramado' y deja la propuesta pendiente para que la otra parte la re-confirme.
+ */
+export function proposeReschedule(
+  orderId: string,
+  proposedBy: 'cliente' | 'prestador',
+  proposedByName: string,
+  newDate: string,
+  newTime: string,
+  reason: string
+): ServiceRequest | undefined {
+  const req = getServiceRequestById(orderId);
+  if (!req) return undefined;
+
+  const proposal: RescheduleProposal = {
+    proposedBy,
+    proposedDate: newDate,
+    proposedTime: newTime,
+    reason,
+    createdAt: new Date().toISOString()
+  };
+
+  updateServiceRequest(orderId, {
+    status: 'reprogramado',
+    pendingReschedule: proposal
+  });
+
+  addChatMessage(orderId, {
+    sender: proposedBy,
+    senderName: proposedByName,
+    text: `📅 Propuse reprogramar la visita para el ${newDate} a las ${newTime} hs. Motivo: ${reason}.`,
+    actionType: 'propose_reschedule',
+    actionMetadata: { date: newDate, time: newTime, reason }
+  });
+
+  addChatMessage(orderId, {
+    sender: 'sistema',
+    senderName: 'AcáNomás',
+    text: `⚠️ Solicitud de reprogramación pendiente: ${proposedByName} propuso el ${newDate} a las ${newTime} hs. Se requiere re-confirmación de la otra parte para validar la fecha.`,
+    actionType: 'info'
+  });
+
+  return getServiceRequestById(orderId);
+}
+
+/**
+ * Re-confirma la propuesta de reprogramación aceptándola
+ */
+export function confirmReschedule(
+  orderId: string,
+  confirmedByName: string,
+  confirmedByRole: 'cliente' | 'prestador'
+): ServiceRequest | undefined {
+  const req = getServiceRequestById(orderId);
+  if (!req || !req.pendingReschedule) return undefined;
+
+  const { proposedDate, proposedTime } = req.pendingReschedule;
+
+  updateServiceRequest(orderId, {
+    status: 'confirmado',
+    agreedDate: proposedDate,
+    agreedTime: proposedTime,
+    pendingReschedule: undefined,
+    phoneUnlocked: true
+  });
+
+  addChatMessage(orderId, {
+    sender: confirmedByRole,
+    senderName: confirmedByName,
+    text: `✅ Acepté la nueva fecha de visita: ${proposedDate} a las ${proposedTime} hs.`,
+    actionType: 'accept_reschedule',
+    actionMetadata: { date: proposedDate, time: proposedTime }
+  });
+
+  addChatMessage(orderId, {
+    sender: 'sistema',
+    senderName: 'AcáNomás',
+    text: `🎉 Turno re-confirmado con éxito para el ${proposedDate} a las ${proposedTime} hs. Visita agendada.`,
+    actionType: 'confirm_visit'
+  });
+
+  return getServiceRequestById(orderId);
+}
+
+/**
+ * Cancela el servicio (cliente o prestador en todo momento)
+ */
+export function cancelServiceOrder(
+  orderId: string,
+  cancelledByRole: 'cliente' | 'prestador',
+  cancelledByName: string,
+  reason: string
+): ServiceRequest | undefined {
+  const req = getServiceRequestById(orderId);
+  if (!req) return undefined;
+
+  updateServiceRequest(orderId, {
+    status: 'cancelado',
+    cancelledBy: cancelledByRole,
+    cancellationReason: reason,
+    pendingReschedule: undefined
+  });
+
+  addChatMessage(orderId, {
+    sender: cancelledByRole,
+    senderName: cancelledByName,
+    text: `❌ Cancelé el servicio. Motivo: ${reason}`,
+    actionType: 'cancel_service',
+    actionMetadata: { reason }
+  });
+
+  addChatMessage(orderId, {
+    sender: 'sistema',
+    senderName: 'AcáNomás',
+    text: `🚫 El servicio ha sido cancelado por ${cancelledByName}. Motivo informado: "${reason}". La visita queda desestimada.`,
+    actionType: 'cancel_service'
+  });
+
+  return getServiceRequestById(orderId);
 }
 
 export function getReviews(): Review[] {
