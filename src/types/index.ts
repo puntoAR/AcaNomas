@@ -116,5 +116,9 @@ export interface AuthUser {
   role: UserRole;
   phone?: string;
   email?: string;
+  password?: string;
+  address?: string;
+  dniPhotoUrl?: string;
   providerId?: string; // Id de prestador vinculado si su rol es 'prestador'
+  createdAt?: string;
 }

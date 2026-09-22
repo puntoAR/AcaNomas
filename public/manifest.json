@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "AcáNomás Balcarce",
   "short_name": "AcáNomás",
   "description": "Tu oficio de confianza en 2 clics. Red barrial de servicios para Balcarce.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ea580c",
@@ -11,12 +13,21 @@
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-icono-transparente.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "categories": ["business", "utilities", "lifestyle"]
 }
