@@ -15,8 +15,10 @@ import {
   LogIn,
   LogOut,
   User,
-  Crown
+  Crown,
+  Info
 } from 'lucide-react';
+import AboutModal from './AboutModal';
 import { getProviders, getServiceRequests } from '@/lib/store';
 import { getCurrentUser, logout } from '@/lib/auth';
 import { AuthUser } from '@/types';
@@ -24,6 +26,7 @@ import { AuthUser } from '@/types';
 export default function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [hasEnCamino, setHasEnCamino] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -142,6 +145,14 @@ export default function Navbar() {
                 </span>
               )}
             </Link>
+
+            <button
+              onClick={() => setAboutOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <Info className="w-4 h-4 text-amber-500" />
+              <span>Acerca de</span>
+            </button>
 
             <Link
               href="/ofrecer-servicio"
@@ -294,6 +305,19 @@ export default function Navbar() {
             </span>
           </Link>
 
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setAboutOpen(true);
+            }}
+            className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-base font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <Info className="w-5 h-5 text-amber-500" />
+              Acerca de (Contacto Programador)
+            </span>
+          </button>
+
           <Link
             href="/ofrecer-servicio"
             onClick={() => setMobileMenuOpen(false)}
@@ -315,6 +339,9 @@ export default function Navbar() {
           )}
         </div>
       )}
+
+      {/* Modal Acerca de puntoAR */}
+      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
     </header>
   );
 }
