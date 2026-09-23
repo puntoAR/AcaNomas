@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import ServiceRequestModal from '@/components/ServiceRequestModal';
+import AuthPromptModal from '@/components/AuthPromptModal';
 import { Provider, Review } from '@/types';
 import { getProviderById, getReviews } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
 
 // Dynamic import for Leaflet map component with ssr disabled
 const MapCoverage = dynamic(() => import('@/components/MapCoverage'), {
@@ -44,6 +46,7 @@ export default function ProviderProfilePage({ params }: PageProps) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
 
   useEffect(() => {
     const p = getProviderById(resolvedParams.id);
@@ -51,8 +54,24 @@ export default function ProviderProfilePage({ params }: PageProps) {
       setProvider(p);
       const allReviews = getReviews();
       setReviews(allReviews.filter(r => r.providerId === p.id));
+
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('action') === 'book' && getCurrentUser()) {
+          setIsModalOpen(true);
+        }
+      }
     }
   }, [resolvedParams.id]);
+
+  const handleOpenTurno = () => {
+    const user = getCurrentUser();
+    if (!user) {
+      setIsAuthPromptOpen(true);
+    } else {
+      setIsModalOpen(true);
+    }
+  };
 
   if (!provider) {
     return (
@@ -174,7 +193,7 @@ export default function ProviderProfilePage({ params }: PageProps) {
             {/* Desktop CTA Button */}
             <div className="hidden sm:block shrink-0">
               <button
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleOpenTurno}
                 className="px-6 py-3.5 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-600/25 active:scale-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-5 h-5" />
@@ -303,7 +322,7 @@ export default function ProviderProfilePage({ params }: PageProps) {
       {/* Floating Sticky Mobile CTA */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur border-t border-slate-200 z-40 shadow-2xl">
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenTurno}
           className="w-full py-3.5 px-4 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-600 active:scale-98 shadow-md shadow-emerald-600/30 flex items-center justify-center gap-2"
         >
           <MessageCircle className="w-5 h-5" />
@@ -311,11 +330,20 @@ export default function ProviderProfilePage({ params }: PageProps) {
         </button>
       </div>
 
-      {/* Modal */}
+      {/* Modal de Solicitud de Turno */}
       <ServiceRequestModal
         provider={provider}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        redirectUrl={`/profesional/${provider.id}?action=book`}
+      />
+
+      {/* Modal de Requerimiento de Autenticación */}
+      <AuthPromptModal
+        isOpen={isAuthPromptOpen}
+        onClose={() => setIsAuthPromptOpen(false)}
+        provider={provider}
+        redirectUrl={`/profesional/${provider.id}?action=book`}
       />
     </div>
   );

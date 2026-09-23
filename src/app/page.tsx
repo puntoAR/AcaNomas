@@ -22,8 +22,10 @@ import Navbar from '@/components/Navbar';
 import CategorySelector from '@/components/CategorySelector';
 import ProviderCard from '@/components/ProviderCard';
 import ServiceRequestModal from '@/components/ServiceRequestModal';
+import AuthPromptModal from '@/components/AuthPromptModal';
 import { Provider, ServiceRequest } from '@/types';
 import { getProviders, getCategories, getServiceRequests } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
 
 // Dynamic import for Leaflet map component with ssr disabled
 const MapCoverage = dynamic(() => import('@/components/MapCoverage'), {
@@ -52,9 +54,11 @@ export default function HomePage() {
   // View mode: 'cards' or 'map'
   const [viewMode, setViewMode] = useState<'cards' | 'map'>('cards');
 
-  // Request modal
+  // Request modal & Auth prompt
   const [activeProviderForModal, setActiveProviderForModal] = useState<Provider | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
+  const [providerForAuthPrompt, setProviderForAuthPrompt] = useState<Provider | null>(null);
 
   useEffect(() => {
     const provs = getProviders();
@@ -65,6 +69,23 @@ export default function HomePage() {
     const enCamino = requests.find(r => r.status === 'en_camino');
     if (enCamino) {
       setActiveEnCaminoRequest(enCamino);
+    }
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reqProvId = urlParams.get('requestProvider');
+      if (reqProvId) {
+        const found = provs.find(p => p.id === reqProvId);
+        if (found) {
+          if (getCurrentUser()) {
+            setActiveProviderForModal(found);
+            setIsModalOpen(true);
+          } else {
+            setProviderForAuthPrompt(found);
+            setIsAuthPromptOpen(true);
+          }
+        }
+      }
     }
   }, []);
 
@@ -108,6 +129,12 @@ export default function HomePage() {
     : null;
 
   const handleOpenRequest = (provider: Provider) => {
+    const user = getCurrentUser();
+    if (!user) {
+      setProviderForAuthPrompt(provider);
+      setIsAuthPromptOpen(true);
+      return;
+    }
     setActiveProviderForModal(provider);
     setIsModalOpen(true);
   };
@@ -371,6 +398,15 @@ export default function HomePage() {
         provider={activeProviderForModal}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        redirectUrl={activeProviderForModal ? `/?requestProvider=${activeProviderForModal.id}` : '/'}
+      />
+
+      {/* Modal de Requerimiento de Autenticación para Turnos */}
+      <AuthPromptModal
+        isOpen={isAuthPromptOpen}
+        onClose={() => setIsAuthPromptOpen(false)}
+        provider={providerForAuthPrompt}
+        redirectUrl={providerForAuthPrompt ? `/?requestProvider=${providerForAuthPrompt.id}` : '/'}
       />
     </div>
   );

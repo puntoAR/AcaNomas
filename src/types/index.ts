@@ -141,11 +141,13 @@ export interface AuthUser {
   id: string;
   name: string;
   role: UserRole;
+  username?: string;          // Nombre de usuario único (ej: jroman2266)
   phone?: string;
   email?: string;
   password?: string;
+  mustChangePassword?: boolean; // true si debe cambiar la clave al ingresar
   address?: string;
   dniPhotoUrl?: string;
-  providerId?: string; // Id de prestador vinculado si su rol es 'prestador'
+  providerId?: string;        // Id de prestador vinculado si su rol es 'prestador'
   createdAt?: string;
 }

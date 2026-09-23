@@ -129,22 +129,24 @@ export default function Navbar() {
               <span>Soy Prestador</span>
             </Link>
 
-            <Link
-              href="/admin"
-              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                pathname.startsWith('/admin')
-                  ? 'bg-orange-50 text-orange-600'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 text-indigo-600" />
-              <span>Admin</span>
-              {pendingCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                  {pendingCount}
-                </span>
-              )}
-            </Link>
+            {currentUser?.role === 'admin' && (
+              <Link
+                href="/admin"
+                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  pathname.startsWith('/admin')
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                <span>Panel Admin</span>
+                {pendingCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {pendingCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             <button
               onClick={() => setAboutOpen(true)}
@@ -278,21 +280,23 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <Link
-            href="/admin"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-base font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-indigo-600" />
-              Panel Administrador (Validaciones)
-            </span>
-            {pendingCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold">
-                {pendingCount}
+          {currentUser?.role === 'admin' && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center justify-between px-3 py-2 rounded-lg text-base font-semibold text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100"
+            >
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                Panel Administrador
               </span>
-            )}
-          </Link>
+              {pendingCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold">
+                  {pendingCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           <Link
             href="/login"
@@ -301,7 +305,7 @@ export default function Navbar() {
           >
             <span className="flex items-center gap-2">
               <LogIn className="w-5 h-5 text-slate-600" />
-              {currentUser ? `Sesión: ${currentUser.name}` : 'Iniciar Sesión (Admin / Usuario)'}
+              {currentUser ? `Mi Cuenta (${currentUser.name})` : 'Iniciar Sesión / Registrarse'}
             </span>
           </Link>
 

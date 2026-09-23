@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   ShieldCheck, 
   Award, 
@@ -14,21 +15,23 @@ import {
   EyeOff, 
   Layers, 
   Star, 
-  Clock,
-  ArrowLeft,
-  Search,
-  Check
+  Clock, 
+  ArrowLeft, 
+  Search, 
+  Check 
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { Provider, Category, AuthUser } from '@/types';
 import { getProviders, updateProvider, getCategories, addCategory } from '@/lib/store';
-import { getCurrentUser, loginAsAdmin, logout } from '@/lib/auth';
+import { getCurrentUser, loginUser, logout } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeTab, setActiveTab] = useState<'verificaciones' | 'prestadores' | 'rubros'>('verificaciones');
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [userInput, setUserInput] = useState('jroman2266');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [lockCountdown, setLockCountdown] = useState<number | null>(null);
@@ -60,15 +63,19 @@ export default function AdminDashboardPage() {
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    const res = loginAsAdmin(passwordInput);
-    if (res.success) {
+    const res = loginUser(userInput, passwordInput);
+    if (res.success && res.user?.role === 'admin') {
+      if (res.mustChangePassword) {
+        router.push('/login?redirect=/admin');
+        return;
+      }
       setLockCountdown(null);
       loadData();
     } else {
       if (res.isLocked && res.remainingSeconds) {
         setLockCountdown(res.remainingSeconds);
       }
-      setLoginError(res.error || 'Clave incorrecta');
+      setLoginError(res.error || 'Credenciales de administrador incorrectas');
     }
   };
 
@@ -145,12 +152,26 @@ export default function AdminDashboardPage() {
             <form onSubmit={handleAdminLogin} className="space-y-3 pt-2 text-left">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Contraseña de Administrador
+                  Usuario de Administrador
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Usuario (jroman2266)"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Contraseña
                 </label>
                 <input
                   type="password"
                   required
-                  placeholder="Contraseña (admin123)"
+                  placeholder="Tu contraseña de admin"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900"
@@ -178,16 +199,15 @@ export default function AdminDashboardPage() {
               >
                 {lockCountdown && lockCountdown > 0
                   ? `🔒 Bloqueado (${lockCountdown}s)`
-                  : 'Desbloquear Panel'}
+                  : 'Ingresar al Panel'}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setPasswordInput('admin123')}
-                className="w-full text-center text-[11px] text-slate-400 hover:text-slate-600"
+              <Link
+                href="/login?redirect=/admin"
+                className="block text-center text-xs font-bold text-indigo-600 hover:text-indigo-800 pt-1"
               >
-                (Autocompletar clave de prueba: admin123)
-              </button>
+                Ir a la pantalla de inicio de sesión estándar →
+              </Link>
             </form>
           </div>
         </main>

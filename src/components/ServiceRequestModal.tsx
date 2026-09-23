@@ -11,13 +11,15 @@ import {
   User, 
   FileText, 
   MessageCircle, 
-  Sparkles,
-  CheckCircle2,
-  Lock,
-  ExternalLink
+  Sparkles, 
+  CheckCircle2, 
+  Lock, 
+  ExternalLink, 
+  LogIn 
 } from 'lucide-react';
 import { Provider, ServiceRequest } from '@/types';
 import { createServiceRequest } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
 import {
   sanitizeTextInput,
   sanitizePhone,
@@ -30,19 +32,23 @@ interface ServiceRequestModalProps {
   provider: Provider | null;
   isOpen: boolean;
   onClose: () => void;
+  redirectUrl?: string;
 }
 
 export default function ServiceRequestModal({
   provider,
   isOpen,
-  onClose
+  onClose,
+  redirectUrl = '/'
 }: ServiceRequestModalProps) {
   const router = useRouter();
 
-  // Form states
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [clientAddress, setClientAddress] = useState('Calle 18 y 21, Balcarce');
+  const currentUser = typeof window !== 'undefined' && isOpen ? getCurrentUser() : null;
+
+  // Form states initialized with logged-in user profile
+  const [clientName, setClientName] = useState(() => (typeof window !== 'undefined' ? getCurrentUser()?.name || '' : ''));
+  const [clientPhone, setClientPhone] = useState(() => (typeof window !== 'undefined' ? getCurrentUser()?.phone || '' : ''));
+  const [clientAddress, setClientAddress] = useState(() => (typeof window !== 'undefined' ? getCurrentUser()?.address || 'Calle 18 y 21, Balcarce' : 'Calle 18 y 21, Balcarce'));
   const [description, setDescription] = useState('');
   const [agreedDate, setAgreedDate] = useState(() => {
     const today = new Date();
@@ -281,6 +287,53 @@ export default function ServiceRequestModal({
             >
               Ir a la pantalla de seguimiento del turno →
             </button>
+          </div>
+        ) : !currentUser ? (
+          <div className="p-6 sm:p-7 space-y-4 text-center">
+            <div className="w-14 h-14 mx-auto rounded-3xl bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900">
+                Iniciá sesión para pedir tu turno
+              </h3>
+              <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
+                Para solicitar un turno o comunicarte con <strong>{provider.name}</strong> debés ingresar con tu cuenta de AcáNomás.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+                }}
+                className="w-full py-3 px-4 rounded-xl font-black text-xs text-white bg-slate-900 hover:bg-slate-800 shadow-md flex items-center justify-center gap-2 transition-all active:scale-98"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Ya tengo cuenta: Iniciar Sesión</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  router.push(`/login?mode=register&role=cliente&redirect=${encodeURIComponent(redirectUrl)}`);
+                }}
+                className="w-full py-3 px-4 rounded-xl font-black text-xs text-slate-900 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all active:scale-98"
+              >
+                <span>Crear Cuenta de Vecino Gratis</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Seguir explorando
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4">
